@@ -10,9 +10,9 @@ from prettytable import PrettyTable
 def print_log(msg, print_flag = True):
     if print_flag:
         if type(msg) is str:
-            print ('%s | ' % (time.strftime("%m/%d/%y @ %I:%M %p", time.localtime()))) + msg
+            print('%s | '.format(time.strftime("%m/%d/%y @ %I:%M %p", time.localtime())) + msg)
         else:
-            print '%s | %r' % (time.strftime("%m/%d/%y @ %I:%M %p", time.localtime()), msg)
+            print('%s | %r'.format(time.strftime("%m/%d/%y @ %I:%M %p", time.localtime()), msg))
         sys.stdout.flush()
 
 def get_rho_string(rho, vtypes = 'I'):

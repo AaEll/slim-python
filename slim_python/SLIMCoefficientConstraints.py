@@ -1,7 +1,6 @@
 import numpy as np
 from prettytable import PrettyTable
 
-
 class SLIMCoefficientConstraints(object):
 
     def check_string_input(self, input_name, input_value):
@@ -12,7 +11,7 @@ class SLIMCoefficientConstraints(object):
             elif input_value.size == 1:
                 setattr(self, input_name, np.repeat(input_value, self.P))
             else:
-                raise ValueError("length of %s is %d; should be %d" % (input_name, input_value.size, self.P))
+                raise ValueError("length of {} is {}; should be {}".format(input_name, input_value.size, self.P))
 
         elif type(input_value) is str:
             setattr(self, input_name, float(input_value)*np.ones(self.P))
@@ -23,10 +22,10 @@ class SLIMCoefficientConstraints(object):
             elif len(input_value) == 1:
                 setattr(self, input_name, np.repeat(input_value, self.P))
             else:
-                raise ValueError("length of %s is %d; should be %d" % (input_name, len(input_value), self.P))
+                raise ValueError("length of {} is {}; should be {}".format(input_name, len(input_value), self.P))
 
         else:
-            raise ValueError("user provided %s with an unsupported type" % input_name)
+            raise ValueError("user provided {} with an unsupported type".format(input_name))
 
     def check_numeric_input(self, input_name, input_value):
         if type(input_value) is np.ndarray:
@@ -36,7 +35,7 @@ class SLIMCoefficientConstraints(object):
             elif input_value.size == 1:
                 setattr(self, input_name, input_value*np.ones(self.P))
             else:
-                raise ValueError("length of %s is %d; should be %d" % (input_name, input_value.size, self.P))
+                raise ValueError("length of {} is {}; should be {}".format(input_name, input_value.size, self.P))
 
         elif type(input_value) is float or type(input_value) is int:
             setattr(self, input_name, float(input_value)*np.ones(self.P))
@@ -47,10 +46,10 @@ class SLIMCoefficientConstraints(object):
             elif len(input_value) == 1:
                 setattr(self, input_name, np.array([float(x) for x in input_value]) * np.ones(self.P))
             else:
-                raise ValueError("length of %s is %d; should be %d" % (input_name, len(input_value), self.P))
+                raise ValueError("length of {} is {}; should be {}".format(input_name, len(input_value), self.P))
 
         else:
-            raise ValueError("user provided %s with an unsupported type" % (input_name))
+            raise ValueError("user provided {} with an unsupported type".format(input_name))
 
     def __init__(self, **kwargs):
         if 'variable_names' in kwargs:
@@ -92,7 +91,7 @@ class SLIMCoefficientConstraints(object):
 
             if self.ub[i] < self.lb[i]:
                 if self.print_flag:
-                    print "fixed issue: ub < lb for variable %s" % self.variable_names[i]
+                    print("fixed issue: ub < lb for variable {}".format(self.variable_names[i]))
                 ub = ub[i]
                 lb = lb[i]
                 self.ub[i] = lb
@@ -107,10 +106,10 @@ class SLIMCoefficientConstraints(object):
             if self.variable_names[i] in {'Intercept','(Intercept)', 'intercept', '(intercept)'}:
                 if self.C_0j[i] > 0 or np.isnan(self.C_0j[i]):
                     if self.print_flag:
-                        print "found intercept variable with penalty value of C_0j = %1.4f" % self.C_0j[i]
+                        print("found intercept variable with penalty value of C_0j = %1.4f".format(self.C_0j[i]))
                     if self.fix_flag:
                         if self.print_flag:
-                            print "setting C_0j for intercept to 0.0 to ensure that intercept is not penalized"
+                            print("setting C_0j for intercept to 0.0 to ensure that intercept is not penalized")
                         self.C_0j[i] = 0.0
 
     def get_field_as_nparray(self, field_name):
@@ -120,6 +119,13 @@ class SLIMCoefficientConstraints(object):
         return np.array(getattr(self, field_name)).tolist()
 
     def set_field(self, field_name, variable_names, field_values):
+        """
+        args:
+            field_names
+            variable_names
+        returns:
+            re-prints table if print_flag is true
+        """
 
         curr_values = getattr(self, field_name)
 
@@ -164,12 +170,15 @@ class SLIMCoefficientConstraints(object):
                 curr_values[self_ind] = field_values[user_ind]
             else:
                 if self.print_flag:
-                    print "warning: Lset object does not contain variable with name: %s" % variable_name
+                    print("warning: Lset object does not contain variable with name: {}".format(variable_name))
 
         if self.check_flag: self.check_set()
         if self.print_flag: self.view()
 
     def view(self):
+        """
+        prints table of constraints on coefficients
+        """
         x = PrettyTable()
         x.align = "r"
         x.add_column("variable_name", self.variable_names)
@@ -178,4 +187,4 @@ class SLIMCoefficientConstraints(object):
         x.add_column("lb", self.get_field_as_list('lb'))
         x.add_column("ub", self.get_field_as_list('ub'))
         x.add_column("C_0j", self.get_field_as_list('C_0j'))
-        print x
+        print(x)

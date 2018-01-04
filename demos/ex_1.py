@@ -10,8 +10,9 @@ import slim_python as slim
 # - outcome variable values should be [-1, 1] or [0, 1]
 # - first row contains names for the outcome variable + input variables
 # - no empty cells
-data_name = 'breastcancer'
-data_dir = os.getcwd() + '/data/'
+
+data_name = 'adult'
+data_dir = os.path.dirname(os.getcwd()) + '/data/'
 data_csv_file = data_dir + data_name + '_processed.csv'
 
 # load data file from csv
@@ -41,7 +42,6 @@ slim.check_data(X = X, Y = Y, X_names = X_names)
 #### TRAIN SCORING SYSTEM USING SLIM ####
 # setup SLIM coefficient set
 coef_constraints = slim.SLIMCoefficientConstraints(variable_names = X_names, ub = 5, lb = -5)
-coef_constraints.view()
 
 #choose upper and lower bounds for the intercept coefficient
 #to ensure that there will be no regularization due to the intercept, choose
@@ -52,8 +52,9 @@ coef_constraints.view()
 #where min_score_i = min((Y*X) * \rho) for rho in \Lset
 #where max_score_i = max((Y*X) * \rho) for rho in \Lset
 #
-#setting intercept_ub and intercept_lb in this way ensures that we can always
+# setting intercept_ub and intercept_lb in this way ensures that we can always
 # classify every point as positive and negative
+
 scores_at_ub = (Y * X) * coef_constraints.ub
 scores_at_lb = (Y * X) * coef_constraints.lb
 non_intercept_ind = np.array([n != '(Intercept)' for n in X_names])
@@ -66,6 +67,7 @@ min_scores = np.sum(min_scores, 1)
 
 intercept_ub = -min(min_scores) + 1
 intercept_lb = -max(max_scores) + 1
+
 coef_constraints.set_field('ub', '(Intercept)', intercept_ub)
 coef_constraints.set_field('lb', '(Intercept)', intercept_lb)
 coef_constraints.view()
@@ -95,6 +97,7 @@ slim_IP, slim_info = slim.create_slim_IP(slim_input)
 # setup SLIM IP parameters
 # see docs/usrccplex.pdf for more about these parameters
 slim_IP.parameters.timelimit.set(10.0) #set runtime here
+
 #TODO: add these default settings to create_slim_IP
 slim_IP.parameters.randomseed.set(0)
 slim_IP.parameters.threads.set(1)
@@ -114,20 +117,27 @@ slim.check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints)
 
 #### CHECK RESULTS ####
 slim_results = slim.get_slim_summary(slim_IP, slim_info, X, Y)
-pprint(slim_results)
+#print(slim_results)
+
+# print metrics from slim_results
+print('simplex_iterations: ' + str(slim_results['simplex_iterations']))
+print('solution_status: ' + str(slim_results['solution_status']))
+print('objval_lowerbound: ' + str(slim_results['objval_lowerbound']))
+print('objective_value: ' + str(slim_results['objective_value']))
+print('optimality_gap: ' + str(slim_results['optimality_gap']))
 
 # print model
+print("Model")
 print(slim_results['string_model'])
 
 # print coefficient vector
-print(slim_results['rho'])
+print("Coefficient Vector: " + str(slim_results['rho']))
 
 # print accuracy metrics
-print 'error_rate: %1.2f%%' % (100*slim_results['error_rate'])
-print 'TPR: %1.2f%%' % (100*slim_results['true_positive_rate'])
-print 'FPR: %1.2f%%' % (100*slim_results['false_positive_rate'])
-print 'true_positives: %d' % slim_results['true_positives']
-print 'false_positives: %d' % slim_results['false_positives']
-print 'true_negatives: %d' % slim_results['true_negatives']
-print 'false_negatives: %d' % slim_results['false_negatives']
-
+print('error_rate: {:.2f}'.format(100*slim_results['error_rate']))
+print('TPR: {:.2f}'.format(100*slim_results['true_positive_rate']))
+print('FPR: {:.2f}'.format(100*slim_results['false_positive_rate']))
+print('true_positives: {:d}'.format(slim_results['true_positives']))
+print('false_positives: {:d}'.format(slim_results['false_positives']))
+print('true_negatives: {:d}'.format(slim_results['true_negatives']))
+print('false_negatives: {:d}'.format(slim_results['false_negatives']))
