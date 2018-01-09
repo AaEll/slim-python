@@ -96,7 +96,7 @@ slim_IP, slim_info = slim.create_slim_IP(slim_input)
 
 # setup SLIM IP parameters
 # see docs/usrccplex.pdf for more about these parameters
-slim_IP.parameters.timelimit.set(10.0) #set runtime here
+slim_IP.parameters.timelimit.set(180.0) #set runtime here
 
 #TODO: add these default settings to create_slim_IP
 slim_IP.parameters.randomseed.set(0)

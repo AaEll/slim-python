@@ -8,6 +8,10 @@ from prettytable import PrettyTable
 
 #PRINTING AND LOGGING
 def print_log(msg, print_flag = True):
+    """
+    args:
+        msg : 
+    """
     if print_flag:
         if type(msg) is str:
             print('%s | '.format(time.strftime("%m/%d/%y @ %I:%M %p", time.localtime())) + msg)
