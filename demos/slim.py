@@ -125,6 +125,7 @@ if __name__ == "__main__":
     slim.check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints)
 
     #### CHECK RESULTS ####
+    # will fail if no non-trivial solution found (?)
     slim_results = slim.get_slim_summary(slim_IP, slim_info, X, Y)
     #print(slim_results)
 
