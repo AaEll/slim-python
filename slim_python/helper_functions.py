@@ -10,7 +10,7 @@ from prettytable import PrettyTable
 def print_log(msg, print_flag = True):
     """
     args:
-        msg : 
+        msg :
     """
     if print_flag:
         if type(msg) is str:
@@ -443,7 +443,7 @@ def get_slim_summary(slim_IP, slim_info, X, Y):
     try:
         rho = np.array(slim_IP.solution.get_values(slim_info['rho_idx']))
         slim_summary.update(get_rho_summary(rho, slim_info, X, Y))
-    except CplexError as e:
+    except CplexSolverError as e:
         print_log(e)
 
     return(slim_summary)
