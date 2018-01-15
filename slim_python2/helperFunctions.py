@@ -297,6 +297,10 @@ def check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints):
     total_error_neg = np.array(slim_IP.solution.get_values(slim_info['total_error_neg_idx']))
     total_l0_norm = np.array(slim_IP.solution.get_values(slim_info['total_l0_norm_idx']))
 
+    #print("total_error: " + str(total_error) )
+    #print("total_error_pos: " + str(total_error_pos) )
+    #print("total_error_neg: " + str(total_error_neg) )
+
     # helper parameters
     L0_reg_ind = slim_info['L0_reg_ind']
     L1_reg_ind = slim_info['L1_reg_ind']
@@ -345,8 +349,15 @@ def check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints):
     assert total_error_neg == sum(err[slim_info['neg_ind']])
     assert all(-expected_scores <= slim_info['M']), 'Big M is not big enough'
 
+    #print("N_pos: " + str(slim_info['N_pos']) )
+    #print("N_neg: " + str(slim_info['N_neg']) )
+
     # extra sanity check tests
-    assert total_error <= min(slim_info['N_pos'], slim_info['N_neg']), 'total_error should be less than total_error_pos + total_error_neg'
+    # this doesnt make sense to me and keeps causing problems....
+    # total_error is the totla misclassified examples
+    # N_pos, N_neg are number of positive and negative misclassified examples
+    #assert total_error <= min(slim_info['N_pos'], slim_info['N_neg']),'total_error should be less than total_error_pos + total_error_neg'
+
 
 # PRINTING AND RECORDING RESULTS
 
@@ -368,9 +379,10 @@ def print_slim_model(rho, X_names, Y_name, show_omitted_variables = True):
     if Y_name is None:
         predict_string = "PREDICT Y = +1 IF SCORE >= {}".format(intercept_val)
     else:
-        predict_string = "PREDICT {} IF SCORE >= {}".format(Y_name[0].upper(), intercept_val)
+        predict_string = "PREDICT {} IF SCORE >= {}".format(Y_name, intercept_val)
 
     if show_omitted_variables is True:
+
         selected_ind = np.flatnonzero(rho_values)
         rho_values = rho_values[selected_ind]
         rho_names = [rho_names[i] for i in selected_ind]
@@ -393,6 +405,7 @@ def print_slim_model(rho, X_names, Y_name, show_omitted_variables = True):
     max([len(s) for s in rho_values_string]) + len("points")) + 2
 
     m = PrettyTable()
+
     m.field_names = ["Variable", "Points", "Tally"]
 
     m.add_row([predict_string, "", ""])

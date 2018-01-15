@@ -214,8 +214,8 @@ def create_slim_IP(input, print_flag = False):
     ## IP VARIABLES
 
     #objective costs (we solve min total_error + N * C_0 * L0_norm + N
-    err_cost = np.ones(shape = (N,))
-    err_cost[pos_ind] = w_pos
+    err_cost = np.ones(shape = (N,)) # create a column vector of ones
+    err_cost[pos_ind] = w_pos 
     err_cost[neg_ind] = w_neg
     C_0 = N * C_0
     C_1 = N * C_1

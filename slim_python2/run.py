@@ -87,9 +87,10 @@ if __name__ == "__main__":
         'X': X,
         'X_names': X_names,
         'Y': Y,
-        'C_0': 0.01,
-        'w_pos': 2.0,
-        'w_neg': 1.0,
+        'Y_name': Y_name,
+        'C_0': 0.0005, # changed from 0.01
+        'w_pos': 5.0, #changed
+        'w_neg': 1.0, #changed
         'L0_min': 0,
         'L0_max': float('inf'),
         'err_min': 0,
@@ -100,6 +101,10 @@ if __name__ == "__main__":
         'neg_err_max': 1.0,
         'coef_constraints': coef_constraints
     }
+
+    print("C_0: " + str(slim_input['C_0']))
+    print("w_pos: " + str(slim_input['w_pos']))
+    print("w_neg: " + str(slim_input['w_neg']))
 
     slim_IP, slim_info = createIP.create_slim_IP(slim_input)
 
@@ -150,3 +155,5 @@ if __name__ == "__main__":
     print('false_positives: {}'.format(slim_results['false_positives']))
     print('true_negatives: {}'.format(slim_results['true_negatives']))
     print('false_negatives: {}'.format(slim_results['false_negatives']))
+
+    helper.check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints)
