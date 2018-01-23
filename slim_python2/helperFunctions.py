@@ -77,6 +77,16 @@ def convert_str_to_bool(val):
         return None
 
 def get_or_set_default(settings, setting_name, default_value, type_check = False, print_flag = False):
+    """
+    primarily used in createIP.py
+    Args:
+        settings - (dict)
+        setting_name - (str, dict key)
+        default_value -
+        type_check (bool)
+    Returns:
+        updated settings (dict)
+    """
 
     if setting_name in settings:
         if type_check:
@@ -84,14 +94,19 @@ def get_or_set_default(settings, setting_name, default_value, type_check = False
             default_type = type(default_value)
             user_type = type(settings[setting_name])
             if user_type == default_type:
+                # if the types match
                 settings[setting_name] = default_value
             else:
-                print_log("type mismatch on %s: user provided type: %s and but expected type: %s" % (setting_name, user_type, default_type), print_flag)
-                print_log("setting %s to its default value: %r" % (setting_name, default_value), print_flag)
+                print_log("type mismatch on {}: user provided type: {} and but expected type: {}".format(setting_name, user_type, default_type), print_flag)
+                print_log("setting {} to its default value: {}".format(setting_name, default_value), print_flag)
                 settings[setting_name] = default_value
-                #else: do nothing
-    else:
-        print_log("setting %s to its default value: %r" % (setting_name, default_value), print_flag)
+
+        else: # if no type check requested
+            print_log("setting {} to value: {}".format(setting_name, default_value), print_flag)
+            settings[setting_name] = default_value
+
+    else: # create new setting
+        print_log("setting {} to its default value: {}".format(setting_name, default_value), print_flag)
         settings[setting_name] = default_value
 
     return settings
@@ -100,8 +115,8 @@ def get_or_set_default(settings, setting_name, default_value, type_check = False
 def get_prediction(x, rho):
     """
     Args:
-        x (np.array) : 1D array of 0,1 values
-        rho (np.array) : score for each feature
+        x (np.array) : 1D array of {0,1} values
+        rho (np.array) : score associated with presence of each feature
     Returns:
         Prediction (int) of -1 or 1
     """
@@ -270,9 +285,8 @@ def check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints):
         slim_info : dictionary of parameters
         X (np.ndarray) :
         Y (np.ndarray) :
-
     Returns:
-
+        nothing if all tests passed
     """
 
     #TODO skip tests if there is no solution

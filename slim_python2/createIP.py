@@ -9,8 +9,10 @@ def create_slim_IP(input, print_flag = False):
     Args:
         input (dict): contains the following keys
             Y : N x 1 np.array of labels (-1 or 1 only)
-            X : N x P np.matrix of feature values (should include a column of 1s to act as an intercept
-            X_names : P x 1 list of strings with names of the feature values (all unique and Intercept name)
+            X : N x P np.matrix of feature values (should include a column of
+                1s to act as an intercept
+            X_names : P x 1 list of strings with names of the feature values
+                      (all unique and Intercept name)
         print_flag (bool):
 
     Returns:
@@ -41,7 +43,7 @@ def create_slim_IP(input, print_flag = False):
     XY = input['X'] * input['Y']
 
     # sizes
-    N = input['X'].shape[0]
+    N = input['X'].shape[0] # number of X examples
     P = input['X'].shape[1]
     pos_ind = np.flatnonzero(input['Y'] == 1) # indices of positive examples
     neg_ind = np.flatnonzero(input['Y'] == -1) # indices of negative examples
@@ -215,7 +217,7 @@ def create_slim_IP(input, print_flag = False):
 
     #objective costs (we solve min total_error + N * C_0 * L0_norm + N
     err_cost = np.ones(shape = (N,)) # create a column vector of ones
-    err_cost[pos_ind] = w_pos 
+    err_cost[pos_ind] = w_pos
     err_cost[neg_ind] = w_neg
     C_0 = N * C_0
     C_1 = N * C_1
