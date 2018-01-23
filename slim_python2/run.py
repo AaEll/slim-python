@@ -14,16 +14,67 @@ from coeffConstraints import SLIMCoefficientConstraints
 # - first row contains names for the outcome variable + input variables
 # - no empty cells
 
+def calc_intercept_constraints(coef_constraints,Y,X,X_names):
+    """
+    choose upper and lower bounds for the intercept coefficient
+    to ensure that there will be no regularization due to the intercept, choose
+
+     intercept_ub < min_i(min_score_i)
+     intercept_lb > max_i(max_score_i)
+
+     where min_score_i = min((Y*X) * \rho) for rho in \Lset
+     where max_score_i = max((Y*X) * \rho) for rho in \Lset
+
+     setting intercept_ub and intercept_lb in this way ensures that we can always
+     classify every point as positive and negative
+
+    Note: for np.ndarray, * is element by element multiplication
+    """
+
+    scores_at_ub = (Y * X) * coef_constraints.ub
+    scores_at_lb = (Y * X) * coef_constraints.lb
+
+    # exclude intercept scores
+    non_intercept_ind = np.array([n != '(Intercept)' for n in X_names])
+    # ^names of all non-intercept variables
+    scores_at_ub = scores_at_ub[:, non_intercept_ind]
+    scores_at_lb = scores_at_lb[:, non_intercept_ind]
+
+    # abs max value (among lb and ub score) for each location in matrix
+    max_scores = np.fmax(scores_at_ub, scores_at_lb)
+    min_scores = np.fmin(scores_at_ub, scores_at_lb)
+
+    # sums scores for each variable horizontally
+    max_tot_scores = np.sum(max_scores, 1)
+    min_tot_scores = np.sum(min_scores, 1)
+
+    # calculate upper bound & lower bound for intercept
+    intercept_ub = -min(min_tot_scores) + 1
+    intercept_lb = -max(max_tot_scores) + 1
+
+    return(intercept_ub,intercept_lb)
+
+
+def load_data(filename):
+    """
+    load's data extracts headers and matrix of values
+    """
+    df = pd.read_csv(filename, sep = ',')
+    data = df.as_matrix()
+    data_headers = list(df.columns.values)
+    return(data,data_headers)
+
+
 # Call: python slim.py <file path> <# seconds>
+
 if __name__ == "__main__":
 
-    data_csv_file = sys.argv[1] # full path to CSV file
+    assert length(sys.arg) < 2, 'call: python run.py <file path> <seconds>'
+
     runTime = float(sys.argv[2])  # time in seconds
 
     # load data file from csv
-    df = pd.read_csv(data_csv_file, sep = ',')
-    data = df.as_matrix()
-    data_headers = list(df.columns.values)
+    data, data_headers = load_data(filename=sys.argv[1])
     N = data.shape[0]
 
     # setup Y vector and Y_name
@@ -45,39 +96,14 @@ if __name__ == "__main__":
     helper.check_data(X = X, Y = Y, X_names = X_names)
 
     #### TRAIN SCORING SYSTEM USING SLIM ####
-    # setup SLIM coefficient set
+
+    # setup SLIM coefficient
     coef_constraints = SLIMCoefficientConstraints(variable_names = X_names, ub = 5, lb = -5)
 
-    #choose upper and lower bounds for the intercept coefficient
-    #to ensure that there will be no regularization due to the intercept, choose
-    #
-    #intercept_ub < min_i(min_score_i)
-    #intercept_lb > max_i(max_score_i)
-    #
-    # where min_score_i = min((Y*X) * \rho) for rho in \Lset
-    # where max_score_i = max((Y*X) * \rho) for rho in \Lset
-    #
-    # setting intercept_ub and intercept_lb in this way ensures that we can always
-    # classify every point as positive and negative
+    # calculate appropriate upper/lower bounds for intercept
+    intercept_ub,intercept_lb = calc_intercept_constraints(coef_constraints,Y,X,X_names)
 
-    # Note: for np.ndarray, * is element by element multiplication
-
-    scores_at_ub = (Y * X) * coef_constraints.ub
-    scores_at_lb = (Y * X) * coef_constraints.lb
-
-    # exclude intercept scores
-    non_intercept_ind = np.array([n != '(Intercept)' for n in X_names]) # names of all non-intercept variables
-    scores_at_ub = scores_at_ub[:, non_intercept_ind]
-    scores_at_lb = scores_at_lb[:, non_intercept_ind]
-
-    max_scores = np.fmax(scores_at_ub, scores_at_lb) # abs max value (among lb and ub score) for each location in matrix
-    min_scores = np.fmin(scores_at_ub, scores_at_lb)
-    max_tot_scores = np.sum(max_scores, 1) # sums scores for each variable horizontally
-    min_tot_scores = np.sum(min_scores, 1)
-
-    intercept_ub = -min(min_tot_scores) + 1
-    intercept_lb = -max(max_tot_scores) + 1
-
+    # update table of coefficient constraints with new values for intercept
     coef_constraints.set_field('ub', '(Intercept)', intercept_ub)
     coef_constraints.set_field('lb', '(Intercept)', intercept_lb)
     print(coef_constraints)
@@ -121,7 +147,6 @@ if __name__ == "__main__":
     slim_IP.parameters.mip.tolerances.absmipgap.set(np.finfo(np.float).eps)
     slim_IP.parameters.mip.tolerances.integrality.set(np.finfo(np.float).eps)
     slim_IP.parameters.emphasis.mip.set(1)
-
 
     # solve SLIM IP
     slim_IP.solve()
