@@ -377,9 +377,9 @@ def print_slim_model(rho, X_names, Y_name, show_omitted_variables = True):
         intercept_val = 0
 
     if Y_name is None:
-        predict_string = "PREDICT Y = +1 IF SCORE >= {}".format(intercept_val)
+        predict_string = "PREDICT Y = +1 IF SCORE >= {}".format(-intercept_val)
     else:
-        predict_string = "PREDICT {} IF SCORE >= {}".format(Y_name, intercept_val)
+        predict_string = "PREDICT {} IF SCORE >= {}".format(Y_name,-intercept_val)
 
     if show_omitted_variables is True:
 

@@ -88,7 +88,7 @@ if __name__ == "__main__":
         'X_names': X_names,
         'Y': Y,
         'Y_name': Y_name,
-        'C_0': 0.000005, # changed from 0.01
+        'C_0': 0.001, # changed from 0.01
         'w_pos': 5.0, #changed
         'w_neg': 1.0, #changed
         'L0_min': 0,
