@@ -1,4 +1,4 @@
-import cplex
+import ortools
 import numpy as np
 from math import ceil, floor
 from .helper_functions import *
@@ -186,7 +186,7 @@ def create_slim_IP(input, print_flag = False):
     assert(epsilon < 1.0)
 
 
-    #### CREATE CPLEX IP
+    #### CREATE IP
 
     #TODO: describe IP
 
@@ -205,6 +205,55 @@ def create_slim_IP(input, print_flag = False):
     #l0_norm = auxiliary variable := L0_norm = sum(alpha[j])
 
     ## IP VARIABLES
+
+    #### Drop Variables and Constraints
+    variables_to_drop = []
+    constraints_to_drop = []
+
+    # drop alpha[j] and beta[j] if L0_reg_ind == False
+    no_L0_reg_ind = np.flatnonzero(~L0_reg_ind).tolist()
+    variables_to_drop += ["alpha_" + str(j) for j in no_L0_reg_ind]
+    variables_to_drop += ["beta_" + str(j) for j in no_L0_reg_ind]
+    constraints_to_drop += ["L0_norm_" + str(j) for j in no_L0_reg_ind]
+    constraints_to_drop += ["L1_norm_" + str(j) for j in no_L0_reg_ind]
+
+    # drop beta[j] if L0_reg_ind == False or L1_reg_ind == False
+    no_L1_reg_ind = np.flatnonzero(~L1_reg_ind).tolist()
+    variables_to_drop += ["beta_" + str(j) for j in no_L1_reg_ind]
+    constraints_to_drop += ["L1_norm_" + str(j) for j in no_L1_reg_ind]
+
+    # drop alpha[j] and beta[j] if values are fixed at 0
+    fixed_value_ind = np.flatnonzero(rho_lb == rho_ub).tolist()
+    variables_to_drop += ["alpha_" + str(j) for j in fixed_value_ind]
+    variables_to_drop += ["beta_" + str(j) for j in fixed_value_ind]
+    constraints_to_drop += ["L0_norm_" + str(j) for j in fixed_value_ind]
+    constraints_to_drop += ["L1_norm_" + str(j) for j in fixed_value_ind]
+
+    # drop constraints based on signs
+    sign_pos_ind = np.flatnonzero(sign_pos).tolist()
+    sign_neg_ind = np.flatnonzero(sign_neg).tolist()
+ --------------
+    # drop L1_norm_neg constraint for any variable rho[j] >= 0
+    constraints_to_drop += ["L1_norm_neg_" + str(j) for j in sign_pos_ind]
+
+    # drop L0_norm_lb constraint for any variable rho[j] >= 0
+    constraints_to_drop += ["L0_norm_lb_" + str(j) for j in sign_pos_ind]
+
+    # drop L1_norm_pos constraint for any variable rho[j] <= 0
+    constraints_to_drop += ["L1_norm_pos_" + str(j) for j in sign_neg_ind]
+
+    # drop L0_norm_ub constraint for any variable rho[j] <= 0
+    constraints_to_drop += ["L0_norm_ub_" + str(j) for j in sign_neg_ind]
+
+    constraints_to_drop = set(constraints_to_drop)
+
+    variables_to_drop = set(variables_to_drop)
+
+    #create info dictionary for debugging
+    rho_names = [n for n in rho_names if n not in variables_to_drop]
+    alpha_names = [n for n in alpha_names if n not in variables_to_drop]
+    beta_names = [n for n in beta_names if n not in variables_to_drop]
+
 
     #objective costs (we solve min total_error + N * C_0 * L0_norm + N
     err_cost = np.ones(shape = (N,))
@@ -235,193 +284,83 @@ def create_slim_IP(input, print_flag = False):
     assert(len(var_names) == n_var)
 
     #add variables
-    slim_IP = cplex.Cplex()
-    slim_IP.objective.set_sense(slim_IP.objective.sense.minimize)
-    slim_IP.variables.add(obj = obj, lb = lb, ub = ub, types = ctype, names=var_names)
+    slim_solver = pywraplp.Solver('simple_mip_program',
+                             pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
+    variables = {}
+    obj = slim_solver.Objective()
+    for objective_coef, lowerbound, upperbound, variable_type, variable_name in zip(obj, lb,ub,ctype,var_names):
+        if variable_name in variables_to_drop:
+            continue
+        if variable_type in set(['B','I']):
+            var = slim_solver.IntVar(lb,ub,variable_name)
+        elif variable_type == 'C':
+            var = slim_solver.NumVar(lb,ub,variable_name)
+        else:
+            assert 0, "variable type : {} is not valid variable type".format(variable_type)
+        variables[variable_name] = var
+        # TODO objective = objective + var * objective_coef
 
     #Loss Constraints
     #Enforce z_i = 1 if incorrect classification)
     #M_i * z_i >= XY[i,].dot(rho) + epsilon
-    for i in range(0, N):
-        slim_IP.linear_constraints.add(names = ["error_" + str(i)],
-                                       lin_expr = [cplex.SparsePair(ind = rho_names + [error_names[i]],
-                                                                    val = XY[i,].tolist() + [M[i]])],
-                                       senses = "G",
-                                       rhs = [epsilon])
+    # z_i*M[i] + ⟨XY[i,:],rho⟩ >= epsilon
+    for i in range(N):
+        constr = slim_solver.Constraint(epsilon,infinity, 'loss_constraint_{}'.format(i))
+        constr.SetCoefficient(variabes["residual_"+str(i)], M[i])
+        for j in range(P):
+            # TODO : check if this should be XY[i,j] * (-1)
+            const.SetCoefficient(variabes["rho_"+str(j)], XY[i,j])
 
     # 0-Norm LB Constraints:
     # lambda_j,lb * alpha_j <= lambda_j <= Inf
     # 0 <= lambda_j - lambda_j,lb * alpha_j < Inf
-    for j in range(0, P):
-        slim_IP.linear_constraints.add(names = ["L0_norm_lb_" + str(j)],
-                                       lin_expr = [cplex.SparsePair(ind = [rho_names[j], alpha_names[j]],
-                                                                    val = [1.0, -rho_lb[j]])],
-                                       senses = "G",
-                                       rhs = [0.0])
+    for j in range(P):
+        if ('L0_norm_'+str(j)) in constraints_to_drop or ('L0_norm_lb_'+str(j)) in constraints_to_drop:
+            continue
+        constr = slim_solver.Constraint(0,infinity, '0-Norm LB Constraint_{}'.format(j))
+        constr.SetCoefficient(variables['rho_'+str(j))],1.0)
+        constr.SetCoefficient(variabes['alpha_'+str(j)],-rho_lb[j])
 
     # 0-Norm UB Constraints:
     # lambda_j <= lambda_j,ub * alpha_j
     # 0 <= -lambda_j + lambda_j,ub * alpha_j
     for j in range(0, P):
-        slim_IP.linear_constraints.add(names = ["L0_norm_ub_" + str(j)],
-                                       lin_expr = [cplex.SparsePair(ind = [rho_names[j], alpha_names[j]],
-                                                                    val = [-1.0, rho_ub[j]])],
-                                       senses = "G",
-                                       rhs = [0.0])
-
+        if ('L0_norm_'+str(j)) in constraints_to_drop or ('L0_norm_ub_'+str(j)) in constraints_to_drop:
+            continue
+        constr = slim_solver.Constraint(0,infinity, '0-Norm LB Constraint_{}'.format(j))
+        constr.SetCoefficient(variables['rho_'+str(j))],-1.0)
+        constr.SetCoefficient(variabes['alpha_'+str(j)],rho_ub[j])
 
     # 1-Norm Positive Constraints:
     #actual constraint: lambda_j <= beta_j
     #cplex constraint:  0 <= -lambda_j + beta_j <= Inf
     for j in range(0, P):
-        slim_IP.linear_constraints.add(names = ["L1_norm_pos_" + str(j)],
-                                       lin_expr = [cplex.SparsePair(ind = [rho_names[j], beta_names[j]],
-                                                                    val = [-1.0, 1.0])],
-                                       senses = "G",
-                                       rhs = [0.0])
-
+        if ('L1_norm_'+str(j)) in constraints_to_drop or ('L1_norm_pos_'+str(j)) in constraints_to_drop:
+            continue
+        constr = slim_solver.Constraint(0,infinity, 'L1-Norm Positive Constraint_{}'.format(j))
+        constr.SetCoefficient(variables['rho_'+str(j))],-1.0)
+        constr.SetCoefficient(variabes['beta_'+str(j)],1.0)
 
     # 1-Norm Negative Constraints:
     #actual constraint: -lambda_j <= beta_j
     #cplex constraint:  0 <= lambda_j + beta_j <= Inf
     for j in range(0, P):
-        slim_IP.linear_constraints.add(names = ["L1_norm_neg_" + str(j)],
-                                       lin_expr = [cplex.SparsePair(ind = [rho_names[j], beta_names[j]],
-                                                                    val = [1.0, 1.0])],
-                                       senses = "G",
-                                       rhs = [0.0])
+        if ('L1_norm_'+str(j)) in constraints_to_drop or ('L1_norm_neg_'+str(j)) in constraints_to_drop:
+            continue
+        constr = slim_solver.Constraint(0,infinity, 'L1-Norm Positive Constraint_{}'.format(j))
+        constr.SetCoefficient(variables['rho_'+str(j))],1.0)
+        constr.SetCoefficient(variabes['beta_'+str(j)],1.0)
 
     # flags for whether or not we will add contraints
-    add_L0_norm_constraint = (L0_min > 0) or (L0_max < P)
-    add_total_error_constraint = (err_min > 0) or (err_max < N)
-    add_pos_error_constraint = (pos_err_min > 0) or (pos_err_max < N_pos) or (add_total_error_constraint)
-    add_neg_error_constraint = (neg_err_min > 0) or (neg_err_max < N_neg) or (add_total_error_constraint)
-
-    ### auxiliary variables and bounds
-    total_l0_norm_name = ['total_l0_norm']
-    total_error_name = ['total_error']
-    total_error_pos_name = ['total_error_pos_name']
-    total_error_neg_name = ['total_error_neg_name']
-
-    slim_IP.variables.add(names = total_l0_norm_name,
-                          obj = [0.0],
-                          lb = [L0_min],
-                          ub = [L0_max],
-                          types = 'I')
-
-    slim_IP.variables.add(names = total_error_name,
-                          obj = [0.0],
-                          lb = [err_min],
-                          ub = [err_max],
-                          types = 'I')
-
-    slim_IP.variables.add(names = total_error_pos_name,
-                          obj = [0.0],
-                          lb = [pos_err_min],
-                          ub = [pos_err_max],
-                          types = 'I')
-
-    slim_IP.variables.add(names = total_error_neg_name,
-                          obj = [0.0],
-                          lb = [neg_err_min],
-                          ub = [neg_err_max],
-                          types = 'I')
-
-
-    # L0_norm constraint
-    #if add_L0_norm_constraint:
-    slim_IP.linear_constraints.add(names = ["total_L0_norm"],
-                                   lin_expr = [cplex.SparsePair(ind = alpha_names + total_l0_norm_name,
-                                                                val = [-1.0] * P + [1.0])],
-                                   senses = "E",
-                                   rhs = [0.0])
-
-    # total_pos_error variable definition constraint
-    #err_pos = sum(error[i]) for i in pos_ind
-    #if add_pos_error_constraint:
-    slim_IP.linear_constraints.add(names = ["total_pos_error"],
-                                   lin_expr = [cplex.SparsePair(ind = [error_names[i] for i in pos_ind] + total_error_pos_name,
-                                                                val = [-1.0] * N_pos + [1.0])],
-                                   senses = "E",
-                                   rhs = [0.0])
-
-
-    # total_neg_error variable definition constraint
-    #err_neg = sum(error[i]) for i in neg_ind
-    #if add_neg_error_constraint:
-    slim_IP.linear_constraints.add(names = ["total_neg_error"],
-                                   lin_expr = [cplex.SparsePair(ind = [error_names[i] for i in neg_ind] + total_error_neg_name,
-                                                                val = [-1.0] * N_neg + [1.0])],
-                                   senses = "E",
-                                   rhs = [0.0])
-
-    # total_error variable definition constraint
-    #if add_total_error_constraint:
-    slim_IP.linear_constraints.add(names = ["total_error"],
-                                   lin_expr = [cplex.SparsePair(ind = total_error_name + total_error_pos_name + total_error_neg_name,
-                                                                val = [1.0, -1.0, -1.0])],
-                                   senses = "E",
-                                   rhs = [0.0])
-
-
-    #### Drop Variables and Constraints
-    variables_to_drop = []
-    constraints_to_drop = []
-
-    # drop alpha[j] and beta[j] if L0_reg_ind == False
-    no_L0_reg_ind = np.flatnonzero(~L0_reg_ind).tolist()
-    variables_to_drop += ["alpha_" + str(j) for j in no_L0_reg_ind]
-    variables_to_drop += ["beta_" + str(j) for j in no_L0_reg_ind]
-    constraints_to_drop += ["L0_norm_lb_" + str(j) for j in no_L0_reg_ind]
-    constraints_to_drop += ["L0_norm_ub_" + str(j) for j in no_L0_reg_ind]
-    constraints_to_drop += ["L1_norm_pos_" + str(j) for j in no_L0_reg_ind]
-    constraints_to_drop += ["L1_norm_neg_" + str(j) for j in no_L0_reg_ind]
-
-    # drop beta[j] if L0_reg_ind == False or L1_reg_ind == False
-    no_L1_reg_ind = np.flatnonzero(~L1_reg_ind).tolist()
-    variables_to_drop += ["beta_" + str(j) for j in no_L1_reg_ind]
-    constraints_to_drop += ["L1_norm_pos_" + str(j) for j in no_L1_reg_ind]
-    constraints_to_drop += ["L1_norm_neg_" + str(j) for j in no_L1_reg_ind]
-
-    # drop alpha[j] and beta[j] if values are fixed at 0
-    fixed_value_ind = np.flatnonzero(rho_lb == rho_ub).tolist()
-    variables_to_drop += ["alpha_" + str(j) for j in fixed_value_ind]
-    variables_to_drop += ["beta_" + str(j) for j in fixed_value_ind]
-    constraints_to_drop += ["L0_norm_lb_" + str(j) for j in fixed_value_ind]
-    constraints_to_drop += ["L0_norm_ub_" + str(j) for j in fixed_value_ind]
-    constraints_to_drop += ["L1_norm_pos_" + str(j) for j in fixed_value_ind]
-    constraints_to_drop += ["L1_norm_neg_" + str(j) for j in fixed_value_ind]
-
-    # drop constraints based on signs
-    sign_pos_ind = np.flatnonzero(sign_pos).tolist()
-    sign_neg_ind = np.flatnonzero(sign_neg).tolist()
-
-    # drop L1_norm_neg constraint for any variable rho[j] >= 0
-    constraints_to_drop += ["L1_norm_neg_" + str(j) for j in sign_pos_ind]
-
-    # drop L0_norm_lb constraint for any variable rho[j] >= 0
-    constraints_to_drop += ["L0_norm_lb_" + str(j) for j in sign_pos_ind]
-
-    # drop L1_norm_pos constraint for any variable rho[j] <= 0
-    constraints_to_drop += ["L1_norm_pos_" + str(j) for j in sign_neg_ind]
-
-    # drop L0_norm_ub constraint for any variable rho[j] <= 0
-    constraints_to_drop += ["L0_norm_ub_" + str(j) for j in sign_neg_ind]
-
-    if len(constraints_to_drop) > 0:
-        constraints_to_drop = list(set(constraints_to_drop))
-        slim_IP.linear_constraints.delete(constraints_to_drop)
-
-    if len(variables_to_drop) > 0:
-        variables_to_drop = list(set(variables_to_drop))
-        slim_IP.variables.delete(variables_to_drop)
-
-    #create info dictionary for debugging
-    rho_names = [n for n in rho_names if n not in variables_to_drop]
-    alpha_names = [n for n in alpha_names if n not in variables_to_drop]
-    beta_names = [n for n in beta_names if n not in variables_to_drop]
+    #add_L0_norm_constraint = (L0_min > 0) or (L0_max < P)
+    #add_total_error_constraint = (err_min > 0) or (err_max < N)
+    #add_pos_error_constraint = (pos_err_min > 0) or (pos_err_max < N_pos) or (add_total_error_constraint)
+    #add_neg_error_constraint = (neg_err_min > 0) or (neg_err_max < N_neg) or (add_total_error_constraint)
 
     slim_info = {
+        # variables & constraints
+        "variables": variables,
+        "costraints": constraints,
         #
         # key parameters
         #
@@ -452,20 +391,9 @@ def create_slim_IP(input, print_flag = False):
         "L0_reg_ind": L0_reg_ind,
         "L1_reg_ind": L1_reg_ind,
         #
-        "n_variables": slim_IP.variables.get_num(),
-        "n_constraints": slim_IP.linear_constraints.get_num(),
-        "names": slim_IP.variables.get_names(),
-        #
-        # MIP variables indices
-        #
-        "rho_idx":  slim_IP.variables.get_indices(rho_names),
-        "alpha_idx": slim_IP.variables.get_indices(alpha_names),
-        "beta_idx": slim_IP.variables.get_indices(beta_names),
-        "error_idx":  slim_IP.variables.get_indices(error_names),
-        "total_l0_norm_idx": slim_IP.variables.get_indices(total_l0_norm_name),
-        "total_error_idx": slim_IP.variables.get_indices(total_error_name),
-        "total_error_pos_idx": slim_IP.variables.get_indices(total_error_pos_name),
-        "total_error_neg_idx": slim_IP.variables.get_indices(total_error_neg_name),
+        "n_variables": len(variables),
+        "n_constraints": len(constraints),
+        "names": list(variables.keys()),
         #
         # MIP variables names
         #
@@ -474,9 +402,6 @@ def create_slim_IP(input, print_flag = False):
         "beta_names": beta_names,
         "rho_names": rho_names,
         "error_names": error_names,
-        "total_error_name": total_error_name,
-        "total_error_pos_name": total_error_pos_name,
-        "total_error_neg_name": total_error_neg_name,
         #
         "X_names": input['X_names'],
         "Y_name": input['Y_name'],
@@ -487,4 +412,4 @@ def create_slim_IP(input, print_flag = False):
     }
 
 
-    return slim_IP, slim_info
+    return slim_solver, slim_info
