@@ -4,7 +4,7 @@ from math import ceil, floor
 from .helper_functions import *
 from .SLIMCoefficientConstraints import SLIMCoefficientConstraints
 
-def create_slim_IP(input, print_flag = False):
+def create_slim_IP(X,Y,input, print_flag = False):
     """
     :param input: dictionary with the following keys
     %Y          N x 1 np.array of labels (-1 or 1 only)
@@ -25,23 +25,21 @@ def create_slim_IP(input, print_flag = False):
             pass
 
     #check preconditions
-    assert 'X' in input, 'no field named X  in input'
     assert 'X_names' in input, 'no field named X_names in input'
-    assert 'Y' in input, 'no field named Y in input'
-    assert input['X'].shape[0] == input['Y'].shape[0]
-    assert input['X'].shape[1] == len(input['X_names'])
-    assert all((input['Y'] == 1) | (input['Y'] == -1))
+    assert X.shape[0] == Y.shape[0]
+    assert X.shape[1] == len(input['X_names'])
+    assert all((Y == 1) | (Y == -1))
 
-    XY = input['X'] * input['Y']
+    XY = X * Y
 
     #sizes
-    N = input['X'].shape[0]
-    P = input['X'].shape[1]
-    pos_ind = np.flatnonzero(input['Y'] == 1)
-    neg_ind = np.flatnonzero(input['Y'] == -1)
+    N = X.shape[0]
+    P = X.shape[1]
+    pos_ind = np.flatnonzero(Y == 1)
+    neg_ind = np.flatnonzero(Y == -1)
     N_pos = len(pos_ind)
     N_neg = len(neg_ind)
-    binary_data_flag = np.all((input['X'] == 0) | (input['X'] == 1))
+    binary_data_flag = np.all((X == 0) | (X == 1))
 
     #outcome variable name
     if ('Y_name' in input) and (type(input['Y_name']) is list):
@@ -306,7 +304,8 @@ def create_slim_IP(input, print_flag = False):
         constr.SetCoefficient(variabes["residual_"+str(i)], M[i])
         for j in range(P):
             # TODO : check if this should be XY[i,j] * (-1)
-            const.SetCoefficient(variabes["rho_"+str(j)], XY[i,j])
+            constr.SetCoefficient(variabes["rho_"+str(j)], XY[i,j])
+        constr.set_is_lazy(True)
 
     # 0-Norm LB Constraints:
     # lambda_j,lb * alpha_j <= lambda_j <= Inf
