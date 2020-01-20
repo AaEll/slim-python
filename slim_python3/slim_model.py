@@ -3,6 +3,8 @@ from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils.multiclass import unique_labels
 from sklearn.metrics import euclidean_distances
 from .create_slim_IP import create_slim_IP
+from .helper_functions import *
+from .SLIMCoefficientConstraints import SLIMCoefficientConstraints
 
 class SLIM(BaseEstimator, ClassifierMixin):
     """
@@ -14,11 +16,24 @@ class SLIM(BaseEstimator, ClassifierMixin):
     It is recommended to view the model's output and re-run until a reasonable model is reached.
     """
 
-    def __init__(self, hyper_param=None):
-        if hyper_param is None:
-            #default param
-            hyper_param = {}
-        self.hyper_param = hyper_param
+    def __init__(self, X_names=None):
+
+        if X_names is not None:
+            assert len(list(set(X_names))) == len(X_names), 'X_names is not unique'
+
+        self.hyper_params ={'X_names' : X_names,
+                            'C_0': 0.01,
+                            'w_pos': 1.0,
+                            'w_neg': 1.0,
+                            'L0_min': 0,
+                            'L0_max': float('inf'),
+                            'err_min': 0,
+                            'err_max': 1.0,
+                            'pos_err_min': 0,
+                            'pos_err_max': 1.0,
+                            'neg_err_min': 0,
+                            'neg_err_max': 1.0,
+                            }
         self.str_representation = None
 
 
@@ -26,22 +41,33 @@ class SLIM(BaseEstimator, ClassifierMixin):
 
         # Check that X and y have correct shape
         X, y = check_X_y(X, y)
+        N, P = X.shape
+        if self.hyper_params['X_names'] is None:
+            self.hyper_params['X_names'] = ['feature_'+str(j) for j in range(P)]
+
+        if '__Intercept__' not in self.hyper_params['X_names']:
+            X = np.insert(arr = X, obj = 0, values = np.ones(N), axis = 1)
+            self.hyper_params['X_names'].insert(0, '__Intercept__')
+            P = P + 1
 
         self.X_ = X
         self.y_ = y
+        self.hyper_params['coef_constraints'] = SLIMCoefficientConstraints(variable_names = X_names, XY = self.X_*self.y_, ub = 5, lb = -5)
+
         # Store the classes seen during fit
         self.classes_ = unique_labels(y)
         assert self.classes_ == 2
         assert all((Y == 1)|(Y == -1)) or all((Y == 1)|(Y == 0)), 'Y[i] should = [-1,1] or [0,1] for all i'
+        assert N > 0, 'X matrix must have at least 1 row'
+        assert P > 0, 'X matrix must have at least 1 column'
+        assert len(Y) == N, 'len(Y) should be same as # of rows in X'
+        assert len(self.hyper_params['X_names'] ) == P, 'len(X_names) should be same as # of cols in X'
 
         # replace 0 with -1, so Y[i] should = [-1,1] for all i
-        y = np.where(y == 0, -1, y)
+        self.y_ = np.where(y == 0, -1, y)
 
-
-        slim_solver, slim_info = create_slim_IP.create_slim_IP(X,y,self.hyper_param)
-
-        slim_solver.parameters.max_time_in_seconds = self.hyper_param['timelimit']
-
+        slim_solver, slim_info = create_slim_IP.create_slim_IP(self.X_,self.y_,self.hyper_params)
+        slim_solver.parameters.max_time_in_seconds = self.hyper_params['timelimit']
         status = slim_solver.Solve()
 
         rho_values = np.array([slim_info['variables'][rho_name].solution_value()
@@ -83,7 +109,8 @@ class SLIM(BaseEstimator, ClassifierMixin):
             'L0_norm': np.nan,
         }
         """
-        self.slim_summary.update(get_rho_summary(rho_values, slim_info, X, Y))
+        self.slim_summary.update(get_rho_summary(rho_values, slim_info, self.X_, self.y_
+        ))
 
         #print(slim_summary)
 
