@@ -52,7 +52,7 @@ class SLIM(BaseEstimator, ClassifierMixin):
 
         self.X_ = X
         self.y_ = y
-        self.hyper_params['coef_constraints'] = SLIMCoefficientConstraints(variable_names = X_names, XY = self.X_*self.y_, ub = 5, lb = -5)
+        self.hyper_params['coef_constraints'] = SLIMCoefficientConstraints(variable_names = self.hyper_params['X_names'], XY = self.X_*self.y_, ub = 5, lb = -5)
 
         # Store the classes seen during fit
         self.classes_ = unique_labels(y)
@@ -82,7 +82,7 @@ class SLIM(BaseEstimator, ClassifierMixin):
 
 
         #MIP Related Items
-        self.slim_summary = {
+        self.slim_summary_ = {
             #
             # IP related information
             #
@@ -109,30 +109,30 @@ class SLIM(BaseEstimator, ClassifierMixin):
             'L0_norm': np.nan,
         }
         """
-        self.slim_summary.update(get_rho_summary(rho_values, slim_info, self.X_, self.y_
+        self.slim_summary_.update(get_rho_summary(rho_values, slim_info, self.X_, self.y_
         ))
 
         #print(slim_summary)
 
         # print metrics from slim_summary
-        print('simplex_iterations: ' + str(slim_summary['simplex_iterations']))
-        print('solution_status: ' + str(slim_summary['solution_status']))
+        print('simplex_iterations: ' + str(slim_summary_['simplex_iterations']))
+        print('solution_status: ' + str(slim_summary_['solution_status']))
 
         # print model
         print("Model")
-        print(slim_summary['string_model'])
+        print(slim_summary_['string_model'])
 
         # print coefficient vector
-        print("Coefficient Vector: " + str(slim_summary['rho']))
+        print("Coefficient Vector: " + str(slim_summary_['rho']))
 
         # print accuracy metrics
-        print('error_rate: {:.2f}'.format(100*slim_summary['error_rate']))
-        print('TPR: {:.2f}'.format(100*slim_summary['true_positive_rate']))
-        print('FPR: {:.2f}'.format(100*slim_summary['false_positive_rate']))
-        print('true_positives: {:d}'.format(slim_summary['true_positives']))
-        print('false_positives: {:d}'.format(slim_summary['false_positives']))
-        print('true_negatives: {:d}'.format(slim_summary['true_negatives']))
-        print('false_negatives: {:d}'.format(slim_summary['false_negatives']))
+        print('error_rate: {:.2f}'.format(100*slim_summary_['error_rate']))
+        print('TPR: {:.2f}'.format(100*slim_summary_['true_positive_rate']))
+        print('FPR: {:.2f}'.format(100*slim_summary_['false_positive_rate']))
+        print('true_positives: {:d}'.format(slim_summary_['true_positives']))
+        print('false_positives: {:d}'.format(slim_summary_['false_positives']))
+        print('true_negatives: {:d}'.format(slim_summary_['true_negatives']))
+        print('false_negatives: {:d}'.format(slim_summary_['false_negatives']))
 
         # Return the classifier
         return self
@@ -140,21 +140,21 @@ class SLIM(BaseEstimator, ClassifierMixin):
     def predict(self, X):
 
         # Check is fit had been called
-        check_is_fitted(self)
+        check_is_fitted(self,['slim_summary_'])
 
         # Input validation
         X = check_array(X)
 
-        yhat = X.dot(self.slim_summary['rho']) > 0
+        yhat = X.dot(self.slim_summary_['rho']) > 0
         yhat = np.array(yhat, dtype = np.float)
 
         return yhat
 
     def __str__(self):
 
-        check_is_fitted(self)
+        check_is_fitted(self,['slim_summary_'])
 
-        if self.slim_summary is not None and "string_model" in self.slim_summary:
-            return self.slim_summary["string_model"]
+        if self.slim_summary_ is not None and "string_model" in self.slim_summary_:
+            return self.slim_summary_["string_model"]
         else:
             return "SLIM Model : Uninitialized"
