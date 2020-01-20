@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import numpy as np
-import cplex
 import warnings
 from prettytable import PrettyTable
 
@@ -220,15 +219,15 @@ def check_data(X, X_names, Y):
     assert len(X_names) == P, 'len(X_names) should be same as # of cols in X'
 
     #X_matrix values
-    if '(Intercept)' in X_names:
-        assert all(X[:, X_names.index('(Intercept)')] == 1.0), "'(Intercept)' column should only be composed of 1s"
+    if '__Intercept__' in X_names:
+        assert all(X[:, X_names.index('__Intercept__')] == 1.0), "'__Intercept__' column should only be composed of 1s"
     else:
-        warnings.warn("there is no column named '(Intercept)' in X_names")
+        warnings.warn("there is no column named '__Intercept__' in X_names")
     assert np.all(~np.isnan(X)), 'X has nan entries'
     assert np.all(~np.isinf(X)), 'X has inf entries'
 
     #Y vector values
-    assert all((Y == 1)|(Y == -1)), 'Y[i] should = [-1,1] for all i'
+    assert all((Y == 1)|(Y == -1)) or all((Y == 1)|(Y == 0)), 'Y[i] should = [-1,1] or [0,1] for all i'
     if all(Y == 1):
         warnings.warn("all Y_i == 1 for all i")
     if all(Y == -1):
@@ -237,6 +236,8 @@ def check_data(X, X_names, Y):
         #TODO (optional) collect warnings and return those?
 
 def check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints):
+    # DEPRICATED
+    assert 0
 
     #TODO skip tests if there is no solution
     #TODO return true to prove that it's passed tests
@@ -311,16 +312,16 @@ def check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints):
     # extra sanity check tests
     assert total_error <= min(slim_info['N_pos'], slim_info['N_neg']), 'total_error should be less than total_error_pos + total_error_neg'
 
-def print_slim_model(rho, X_names, Y_name, show_omitted_variables = False):
+def print_slim_model(rho_values,rho_names, X_names, Y_name, show_omitted_variables = False):
 
     rho_values = np.copy(rho)
     rho_names = list(X_names)
 
-    if '(Intercept)' in rho_names:
-        intercept_ind = X_names.index('(Intercept)')
-        intercept_val = int(rho[intercept_ind])
+    if '__Intercept__' in rho_names:
+        intercept_ind = X_names.index('__Intercept__')
+        intercept_val = int(rho_values[intercept_ind])
         rho_values = np.delete(rho_values, intercept_ind)
-        rho_names.remove('(Intercept)' )
+        rho_names.remove('__Intercept__' )
     else:
         intercept_val = 0
 
@@ -365,7 +366,7 @@ def print_slim_model(rho, X_names, Y_name, show_omitted_variables = False):
     m.align["Tally"] = "r"
     return(m)
 
-def get_rho_summary(rho, slim_info, X, Y):
+def get_rho_summary(rho_values, slim_info, X, Y):
 
     #build a pretty table model
     printed_model = print_slim_model(rho, X_names = slim_info['X_names'], Y_name = slim_info['Y_name'], show_omitted_variables = False)
@@ -404,46 +405,3 @@ def get_rho_summary(rho, slim_info, X, Y):
     }
 
     return(rho_summary)
-
-def get_slim_summary(slim_IP, slim_info, X, Y):
-
-    #TODO: pull add rho_summary for each solution in solution pool
-
-    #MIP Related Items
-    slim_summary = {
-        #
-        # IP related information
-        #
-        'solution_status_code': slim_IP.solution.get_status(),
-        'solution_status': slim_IP.solution.get_status_string(slim_IP.solution.get_status()),
-        'objective_value': slim_IP.solution.get_objective_value(),
-        'optimality_gap': slim_IP.solution.MIP.get_best_objective(),
-        'objval_lowerbound': slim_IP.solution.MIP.get_mip_relative_gap(),
-        'simplex_iterations': slim_IP.solution.progress.get_num_iterations(),
-        'nodes_processed': slim_IP.solution.progress.get_num_nodes_processed(),
-        'nodes_remaining': slim_IP.solution.progress.get_num_nodes_remaining(),
-        #
-        # Solution based information (default values)
-        #
-        'rho': np.nan,
-        'pretty_model': np.nan,
-        'string_model': np.nan,
-        'true_positives': np.nan,
-        'true_negatives': np.nan,
-        'false_positives': np.nan,
-        'false_negatives': np.nan,
-        'mistakes': np.nan,
-        'error_rate': np.nan,
-        'true_positive_rate': np.nan,
-        'false_positive_rate': np.nan,
-        'L0_norm': np.nan,
-    }
-
-    #Update with Solution-Based Stats
-    try:
-        rho = np.array(slim_IP.solution.get_values(slim_info['rho_idx']))
-        slim_summary.update(get_rho_summary(rho, slim_info, X, Y))
-    except CplexSolverError as e:
-        print_log(e)
-
-    return(slim_summary)
