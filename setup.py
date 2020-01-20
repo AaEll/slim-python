@@ -20,10 +20,11 @@ setup(name='slim_python3',
       install_requires=['ortools',
                         'numpy',
                         'scipy',
+                        'copy',
                         'pandas',
                         'ortools',
                         'PrettyTable'
-                        ''],  
+                        ''],
 
 
       )
