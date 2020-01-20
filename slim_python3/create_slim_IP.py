@@ -51,9 +51,6 @@ def create_slim_IP(input, print_flag = False):
     else:
         input['Y_name'] = 'Outcome'
 
-    #TODO: check intercept conditions
-    ## first column of X should be all 1s
-    ## first element of X_name should be '(Intercept)'
 
     #set default parameters
     input = get_or_set_default(input, 'C_0', 0.01, print_flag = print_flag)
@@ -232,7 +229,7 @@ def create_slim_IP(input, print_flag = False):
     # drop constraints based on signs
     sign_pos_ind = np.flatnonzero(sign_pos).tolist()
     sign_neg_ind = np.flatnonzero(sign_neg).tolist()
- --------------
+
     # drop L1_norm_neg constraint for any variable rho[j] >= 0
     constraints_to_drop += ["L1_norm_neg_" + str(j) for j in sign_pos_ind]
 
@@ -318,7 +315,7 @@ def create_slim_IP(input, print_flag = False):
         if ('L0_norm_'+str(j)) in constraints_to_drop or ('L0_norm_lb_'+str(j)) in constraints_to_drop:
             continue
         constr = slim_solver.Constraint(0,infinity, '0-Norm LB Constraint_{}'.format(j))
-        constr.SetCoefficient(variables['rho_'+str(j))],1.0)
+        constr.SetCoefficient(variables['rho_'+str(j)],1.0)
         constr.SetCoefficient(variabes['alpha_'+str(j)],-rho_lb[j])
 
     # 0-Norm UB Constraints:
@@ -328,7 +325,7 @@ def create_slim_IP(input, print_flag = False):
         if ('L0_norm_'+str(j)) in constraints_to_drop or ('L0_norm_ub_'+str(j)) in constraints_to_drop:
             continue
         constr = slim_solver.Constraint(0,infinity, '0-Norm LB Constraint_{}'.format(j))
-        constr.SetCoefficient(variables['rho_'+str(j))],-1.0)
+        constr.SetCoefficient(variables['rho_'+str(j)],-1.0)
         constr.SetCoefficient(variabes['alpha_'+str(j)],rho_ub[j])
 
     # 1-Norm Positive Constraints:
@@ -338,7 +335,7 @@ def create_slim_IP(input, print_flag = False):
         if ('L1_norm_'+str(j)) in constraints_to_drop or ('L1_norm_pos_'+str(j)) in constraints_to_drop:
             continue
         constr = slim_solver.Constraint(0,infinity, 'L1-Norm Positive Constraint_{}'.format(j))
-        constr.SetCoefficient(variables['rho_'+str(j))],-1.0)
+        constr.SetCoefficient(variables['rho_'+str(j)],-1.0)
         constr.SetCoefficient(variabes['beta_'+str(j)],1.0)
 
     # 1-Norm Negative Constraints:
@@ -348,7 +345,7 @@ def create_slim_IP(input, print_flag = False):
         if ('L1_norm_'+str(j)) in constraints_to_drop or ('L1_norm_neg_'+str(j)) in constraints_to_drop:
             continue
         constr = slim_solver.Constraint(0,infinity, 'L1-Norm Positive Constraint_{}'.format(j))
-        constr.SetCoefficient(variables['rho_'+str(j))],1.0)
+        constr.SetCoefficient(variables['rho_'+str(j)],1.0)
         constr.SetCoefficient(variabes['beta_'+str(j)],1.0)
 
     # flags for whether or not we will add contraints
