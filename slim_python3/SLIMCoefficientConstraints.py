@@ -3,7 +3,40 @@ from prettytable import PrettyTable
 
 class SLIMCoefficientConstraints(object):
 
-    def check_string_input(self, input_name, input_value):
+    def __init__(self, **kwargs):
+        if 'variable_names' in kwargs:
+            variable_names = kwargs.get('variable_names')
+            P = len(variable_names)
+        elif 'P' in kwargs:
+            P = kwargs.get('P')
+            variable_names = ["x_" + str(i) for i in range(1, P+1)]
+        else:
+            raise ValueError("user needs to provide 'P' or 'variable_names'")
+
+        self.P = P
+        self.variable_names = variable_names
+        self.fix_flag   = kwargs.get('fix_flag', True)
+        self.check_flag = kwargs.get('check_flag', True)
+        self.print_flag = kwargs.get('print_flag', False)
+
+        ub = kwargs.get('ub', 10.0 * np.ones(P))
+        lb = kwargs.get('lb', -10.0 * np.ones(P))
+        vtype = kwargs.get('type', ['I']*P)
+        C_0j = kwargs.get('C0_j', np.nan*np.ones(P))
+        sign = kwargs.get('sign', np.nan*np.ones(P))
+
+        self.check_and_set_numeric_input('ub', ub)
+        self.check_and_set_numeric_input('lb', lb)
+        self.check_and_set_numeric_input('C_0j', C_0j)
+        self.check_and_set_numeric_input('sign', sign)
+        self.check_and_set_string_input('vtype', vtype)
+
+        self.set_intercept_bounds(kwargs['XY'],kwargs['X_names'])
+
+        if self.check_flag: self.check_set()
+        if self.print_flag: self.view()
+
+    def check_and_set_string_input(self, input_name, input_value):
         if type(input_value) is np.array:
 
             if input_value.size == self.P:
@@ -27,7 +60,7 @@ class SLIMCoefficientConstraints(object):
         else:
             raise ValueError("user provided {} with an unsupported type".format(input_name))
 
-    def check_numeric_input(self, input_name, input_value):
+    def check_and_set_numeric_input(self, input_name, input_value):
         if type(input_value) is np.ndarray:
 
             if input_value.size == self.P:
@@ -51,39 +84,24 @@ class SLIMCoefficientConstraints(object):
         else:
             raise ValueError("user provided {} with an unsupported type".format(input_name))
 
-    def __init__(self, **kwargs):
-        if 'variable_names' in kwargs:
-            variable_names = kwargs.get('variable_names')
-            P = len(variable_names)
-        elif 'P' in kwargs:
-            P = kwargs.get('P')
-            variable_names = ["x_" + str(i) for i in range(1, P+1)]
-        else:
-            raise ValueError("user needs to provide 'P' or 'variable_names'")
+    def set_intercept_bounds(self,XY,X_names):
+        scores_at_ub = (XY) * self.ub
+        scores_at_lb = (XY) * self.lb
 
-        self.P = P
-        self.variable_names = variable_names
-        self.fix_flag   = kwargs.get('fix_flag', True)
-        self.check_flag = kwargs.get('check_flag', True)
-        self.print_flag = kwargs.get('print_flag', False)
+        non_intercept_ind = np.array([n != '__Intercept__' for n in X_names])
+        scores_at_ub = scores_at_ub[:, non_intercept_ind]
+        scores_at_lb = scores_at_lb[:, non_intercept_ind]
 
-        ub = kwargs.get('ub', 10.0 * np.ones(P))
-        lb = kwargs.get('lb', -10.0 * np.ones(P))
-        vtype = kwargs.get('type', ['I']*P)
-        C_0j = kwargs.get('C0_j', np.nan*np.ones(P))
-        sign = kwargs.get('sign', np.nan*np.ones(P))
+        max_scores = np.fmax(scores_at_ub, scores_at_lb)
+        min_scores = np.fmin(scores_at_ub, scores_at_lb)
+        max_scores = np.sum(max_scores, 1)
+        min_scores = np.sum(min_scores, 1)
 
-        self.check_numeric_input('ub', ub)
-        self.check_numeric_input('lb', lb)
-        self.check_numeric_input('C_0j', C_0j)
-        self.check_numeric_input('sign', sign)
-        self.check_string_input('vtype', vtype)
+        intercept_ub = -min(min_scores) + 1
+        intercept_lb = -max(max_scores) + 1
 
-        if self.check_flag: self.check_set()
-        if self.print_flag: self.view()
-
-    def __len__(self):
-        return self.P
+        self.set_field('ub', '__Intercept__', intercept_ub)
+        self.set_field('lb', '__Intercept__', intercept_lb)
 
     def check_set(self):
 
@@ -103,7 +121,7 @@ class SLIMCoefficientConstraints(object):
             if self.sign[i] < 0 and self.ub[i] > 0:
                 self.ub[i] = 0.0
 
-            if self.variable_names[i] in {'Intercept','(Intercept)', 'intercept', '(intercept)'}:
+            if self.variable_names[i] in {'__Intercept__'}:
                 if self.C_0j[i] > 0 or np.isnan(self.C_0j[i]):
                     if self.print_flag:
                         print("found intercept variable with penalty value of C_0j = %1.4f".format(self.C_0j[i]))
@@ -175,7 +193,7 @@ class SLIMCoefficientConstraints(object):
         if self.check_flag: self.check_set()
         if self.print_flag: self.view()
 
-    def view(self):
+    def __str__(self):
         """
         prints table of constraints on coefficients
         """
@@ -187,4 +205,7 @@ class SLIMCoefficientConstraints(object):
         x.add_column("lb", self.get_field_as_list('lb'))
         x.add_column("ub", self.get_field_as_list('ub'))
         x.add_column("C_0j", self.get_field_as_list('C_0j'))
-        print(x)
+        return x.get_string()
+
+    def __len__(self):
+        return self.P
