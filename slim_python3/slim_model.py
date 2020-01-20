@@ -1,12 +1,12 @@
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
-from sklearn.utils.multiclass import unique_labels
-from sklearn.metrics import euclidean_distances
+import numpy as np
 from ortools.linear_solver import pywraplp
 from copy import deepcopy
 from .create_slim_IP import create_slim_IP
 from .helper_functions import *
 from .SLIMCoefficientConstraints import SLIMCoefficientConstraints
+
 
 
 class SLIM(BaseEstimator, ClassifierMixin):
@@ -54,17 +54,17 @@ class SLIM(BaseEstimator, ClassifierMixin):
         if hyper_params['X_names'] is None:
             hyper_params['X_names'] = ['feature_'+str(j) for j in range(P)]
 
-        if '__Intercept__' not in hyper_params['X_names']:
-            X = np.insert(arr = X, obj = 0, values = np.ones(N), axis = 1)
-            hyper_params['X_names'].insert(0, '__Intercept__')
-            P = P + 1
-
         if len(y.shape) == 1:
             y = y[:,None] # add dimension to y
 
+        self.__fit_encoder__(X, 2)
 
-        self.X_ = X
+        self.X_, hyper_params['X_names'] = self.__transform_encoder__(X,hyper_params['X_names'])
         self.y_ = y
+
+        _, P = self.X_.shape
+        assert P == len(hyper_params['X_names'])
+
         hyper_params['coef_constraints'] = SLIMCoefficientConstraints(variable_names = hyper_params['X_names'], XY = self.X_*self.y_, ub = 5, lb = -5)
 
         assert all((self.y_ == 1)|(self.y_ == -1)) or all((self.y_ == 1)|(self.y_ == 0)), 'Y[i] should = [-1,1] or [0,1] for all i'
@@ -72,6 +72,7 @@ class SLIM(BaseEstimator, ClassifierMixin):
         assert P > 0, 'X matrix must have at least 1 column'
         assert len(self.y_) == N, 'len(Y) should be same as # of rows in X'
         assert len(hyper_params['X_names'] ) == P, 'len(X_names) should be same as # of cols in X'
+        assert all(((self.X_ == 1) | (self.X_ == 0)).flatten()), 'X[i,j] should = [0,1] for all i,j'
 
         # replace 0 with -1, so Y[i] should = [-1,1] for all i
         self.y_ = np.where(y == 0, -1, y)
@@ -149,6 +150,39 @@ class SLIM(BaseEstimator, ClassifierMixin):
         # Return the classifier
         return self
 
+
+    def __fit_encoder__(self,X,nclasses):
+        #transformer1 = KBinsDiscretizer(n_bins = nclasses, encode = 'ordinal')
+        #transformer2 = ThermoEncoder()
+        #pipeline = Pipeline([('discretize',transformer1),('encoder',transformer2)])
+
+        #for col in zip(nclasses, X.T):
+        #    if all((col == 1) | (col == 0)): #column is binary
+        #        continue
+        #    else: # otherwise it needs to be transformed
+        #self.encoder_.fit(X)
+        return X
+
+
+    def __transform_encoder__(self,X, X_names = None):
+
+        #check_is_fitted(self,['encoder_'])
+
+        X_transformed = X # self.encoder_.transform(X)
+
+        if '__Intercept__' not in X_names:
+            X_transformed = np.insert(arr = X_transformed, obj = 0, values = np.ones(X.shape[0]), axis = 1)
+
+            if X_names is not None:
+                X_names.insert(0, '__Intercept__')
+
+        X_names_transformed = X_names# TODO
+
+        return X_transformed, X_names_transformed
+
+
+
+
     def predict(self, X):
 
         # Check is fit had been called
@@ -157,7 +191,9 @@ class SLIM(BaseEstimator, ClassifierMixin):
         # Input validation
         X = check_array(X)
 
-        yhat = X.dot(self.slim_summary_['rho']) > 0
+        X,_ = __transform_encoder__(X)
+
+        yhat = X.dot(self.slim_summary_['rho'][:,None]) > 0
         yhat = np.array(yhat, dtype = np.float)
 
         return yhat

@@ -311,7 +311,7 @@ def create_slim_IP(X,Y,input, print_flag = False):
         constr.SetCoefficient(variables["error_"+str(i)], M[i])
         for j in range(P):
             # TODO : check if this should be XY[i,j] * (-1)
-            constr.SetCoefficient(variables["rho_"+str(j)], XY[i,j])
+            constr.SetCoefficient(variables["rho_"+str(j)], float(XY[i,j]))
         #constr.set_is_lazy(True)
 
     # 0-Norm LB Constraints:
