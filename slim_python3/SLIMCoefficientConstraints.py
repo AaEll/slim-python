@@ -31,7 +31,7 @@ class SLIMCoefficientConstraints(object):
         self.check_and_set_numeric_input('sign', sign)
         self.check_and_set_string_input('vtype', vtype)
 
-        self.set_intercept_bounds(kwargs['XY'],kwargs['X_names'])
+        self.set_intercept_bounds(kwargs['XY'],kwargs['variable_names'])
 
         if self.check_flag: self.check_set()
         if self.print_flag: self.view()

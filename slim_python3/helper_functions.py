@@ -312,9 +312,9 @@ def check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints):
     # extra sanity check tests
     assert total_error <= min(slim_info['N_pos'], slim_info['N_neg']), 'total_error should be less than total_error_pos + total_error_neg'
 
-def print_slim_model(rho_values,rho_names, X_names, Y_name, show_omitted_variables = False):
+def print_slim_model(rho_values, X_names, Y_name, show_omitted_variables = False):
 
-    rho_values = np.copy(rho)
+    rho_values = np.copy(rho_values)
     rho_names = list(X_names)
 
     if '__Intercept__' in rho_names:
@@ -369,7 +369,7 @@ def print_slim_model(rho_values,rho_names, X_names, Y_name, show_omitted_variabl
 def get_rho_summary(rho_values, slim_info, X, Y):
 
     #build a pretty table model
-    printed_model = print_slim_model(rho, X_names = slim_info['X_names'], Y_name = slim_info['Y_name'], show_omitted_variables = False)
+    printed_model = print_slim_model(rho_values, X_names = slim_info['X_names'], Y_name = slim_info['Y_name'], show_omitted_variables = False)
 
     #transform Y
     y = np.array(Y.flatten(), dtype = np.float)
@@ -380,7 +380,7 @@ def get_rho_summary(rho_values, slim_info, X, Y):
     N_neg = N - N_pos
 
     #get predictions
-    yhat = X.dot(rho) > 0
+    yhat = X.dot(rho_values) > 0
     yhat = np.array(yhat, dtype = np.float)
     yhat[yhat == 0] = -1
 
@@ -390,7 +390,7 @@ def get_rho_summary(rho_values, slim_info, X, Y):
     false_negatives = np.sum(yhat[pos_ind] == -1)
 
     rho_summary = {
-        'rho': rho,
+        'rho': rho_values,
         'pretty_model': printed_model,
         'string_model': printed_model.get_string(),
         'true_positives': true_positives,
@@ -401,7 +401,7 @@ def get_rho_summary(rho_values, slim_info, X, Y):
         'error_rate': (false_positives + false_negatives) / N,
         'true_positive_rate': true_positives / N_pos,
         'false_positive_rate': false_positives / N_neg,
-        'L0_norm': np.sum(rho[slim_info['L0_reg_ind']]),
+        'L0_norm': np.sum(rho_values[slim_info['L0_reg_ind']]),
     }
 
     return(rho_summary)

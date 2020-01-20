@@ -2,9 +2,12 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils.multiclass import unique_labels
 from sklearn.metrics import euclidean_distances
+from ortools.linear_solver import pywraplp
+from copy import deepcopy
 from .create_slim_IP import create_slim_IP
 from .helper_functions import *
 from .SLIMCoefficientConstraints import SLIMCoefficientConstraints
+
 
 class SLIM(BaseEstimator, ClassifierMixin):
     """
@@ -16,7 +19,7 @@ class SLIM(BaseEstimator, ClassifierMixin):
     It is recommended to view the model's output and re-run until a reasonable model is reached.
     """
 
-    def __init__(self, X_names=None):
+    def __init__(self, X_names=None,hyper_params = {}):
 
         if X_names is not None:
             assert len(list(set(X_names))) == len(X_names), 'X_names is not unique'
@@ -33,7 +36,10 @@ class SLIM(BaseEstimator, ClassifierMixin):
                             'pos_err_max': 1.0,
                             'neg_err_min': 0,
                             'neg_err_max': 1.0,
+                            'timelimit': 300
                             }
+
+        self.hyper_params.update(hyper_params)
         self.str_representation = None
 
 
@@ -42,32 +48,38 @@ class SLIM(BaseEstimator, ClassifierMixin):
         # Check that X and y have correct shape
         X, y = check_X_y(X, y)
         N, P = X.shape
-        if self.hyper_params['X_names'] is None:
-            self.hyper_params['X_names'] = ['feature_'+str(j) for j in range(P)]
 
-        if '__Intercept__' not in self.hyper_params['X_names']:
+        hyper_params = deepcopy(self.hyper_params)
+
+        if hyper_params['X_names'] is None:
+            hyper_params['X_names'] = ['feature_'+str(j) for j in range(P)]
+
+        if '__Intercept__' not in hyper_params['X_names']:
             X = np.insert(arr = X, obj = 0, values = np.ones(N), axis = 1)
-            self.hyper_params['X_names'].insert(0, '__Intercept__')
+            hyper_params['X_names'].insert(0, '__Intercept__')
             P = P + 1
+
+        if len(y.shape) == 1:
+            y = y[:,None] # add dimension to y
+
 
         self.X_ = X
         self.y_ = y
-        self.hyper_params['coef_constraints'] = SLIMCoefficientConstraints(variable_names = self.hyper_params['X_names'], XY = self.X_*self.y_, ub = 5, lb = -5)
+        hyper_params['coef_constraints'] = SLIMCoefficientConstraints(variable_names = hyper_params['X_names'], XY = self.X_*self.y_, ub = 5, lb = -5)
 
-        # Store the classes seen during fit
-        self.classes_ = unique_labels(y)
-        assert self.classes_ == 2
-        assert all((Y == 1)|(Y == -1)) or all((Y == 1)|(Y == 0)), 'Y[i] should = [-1,1] or [0,1] for all i'
+        assert all((self.y_ == 1)|(self.y_ == -1)) or all((self.y_ == 1)|(self.y_ == 0)), 'Y[i] should = [-1,1] or [0,1] for all i'
         assert N > 0, 'X matrix must have at least 1 row'
         assert P > 0, 'X matrix must have at least 1 column'
-        assert len(Y) == N, 'len(Y) should be same as # of rows in X'
-        assert len(self.hyper_params['X_names'] ) == P, 'len(X_names) should be same as # of cols in X'
+        assert len(self.y_) == N, 'len(Y) should be same as # of rows in X'
+        assert len(hyper_params['X_names'] ) == P, 'len(X_names) should be same as # of cols in X'
 
         # replace 0 with -1, so Y[i] should = [-1,1] for all i
         self.y_ = np.where(y == 0, -1, y)
 
-        slim_solver, slim_info = create_slim_IP.create_slim_IP(self.X_,self.y_,self.hyper_params)
-        slim_solver.parameters.max_time_in_seconds = self.hyper_params['timelimit']
+        slim_solver, slim_info = create_slim_IP(self.X_,self.y_,hyper_params)
+        #TODO set hyper_params['timelimit'] as max time for solver
+
+        # NOTE this will crash the kernal if constraint names are not unique
         status = slim_solver.Solve()
 
         rho_values = np.array([slim_info['variables'][rho_name].solution_value()
@@ -88,7 +100,7 @@ class SLIM(BaseEstimator, ClassifierMixin):
             #
             'solution_status_code': status_code,
             'solution_status': status,
-            'objective_value': slim_solver.Objective.Value(),
+            'objective_value': slim_solver.Objective().Value(),
             'simplex_iterations': slim_solver.Iterations(),
             'nodes_processed': slim_solver.nodes()
         }
@@ -115,24 +127,24 @@ class SLIM(BaseEstimator, ClassifierMixin):
         #print(slim_summary)
 
         # print metrics from slim_summary
-        print('simplex_iterations: ' + str(slim_summary_['simplex_iterations']))
-        print('solution_status: ' + str(slim_summary_['solution_status']))
+        print('simplex_iterations: ' + str(self.slim_summary_['simplex_iterations']))
+        print('solution_status: ' + str(self.slim_summary_['solution_status']))
 
         # print model
         print("Model")
-        print(slim_summary_['string_model'])
+        print(self.slim_summary_['string_model'])
 
         # print coefficient vector
-        print("Coefficient Vector: " + str(slim_summary_['rho']))
+        print("Coefficient Vector: " + str(self.slim_summary_['rho']))
 
         # print accuracy metrics
-        print('error_rate: {:.2f}'.format(100*slim_summary_['error_rate']))
-        print('TPR: {:.2f}'.format(100*slim_summary_['true_positive_rate']))
-        print('FPR: {:.2f}'.format(100*slim_summary_['false_positive_rate']))
-        print('true_positives: {:d}'.format(slim_summary_['true_positives']))
-        print('false_positives: {:d}'.format(slim_summary_['false_positives']))
-        print('true_negatives: {:d}'.format(slim_summary_['true_negatives']))
-        print('false_negatives: {:d}'.format(slim_summary_['false_negatives']))
+        print('error_rate: {:.2f}'.format(100*self.slim_summary_['error_rate']))
+        print('TPR: {:.2f}'.format(100*self.slim_summary_['true_positive_rate']))
+        print('FPR: {:.2f}'.format(100*self.slim_summary_['false_positive_rate']))
+        print('true_positives: {:d}'.format(self.slim_summary_['true_positives']))
+        print('false_positives: {:d}'.format(self.slim_summary_['false_positives']))
+        print('true_negatives: {:d}'.format(self.slim_summary_['true_negatives']))
+        print('false_negatives: {:d}'.format(self.slim_summary_['false_negatives']))
 
         # Return the classifier
         return self

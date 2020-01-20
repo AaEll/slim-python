@@ -1,4 +1,4 @@
-import ortools
+from ortools.linear_solver import pywraplp
 import numpy as np
 from math import ceil, floor
 from .helper_functions import *
@@ -244,10 +244,6 @@ def create_slim_IP(X,Y,input, print_flag = False):
 
     variables_to_drop = set(variables_to_drop)
 
-    #create info dictionary for debugging
-    rho_names = [n for n in rho_names if n not in variables_to_drop]
-    alpha_names = [n for n in alpha_names if n not in variables_to_drop]
-    beta_names = [n for n in beta_names if n not in variables_to_drop]
 
 
     #objective costs (we solve min total_error + N * C_0 * L0_norm + N
@@ -281,19 +277,30 @@ def create_slim_IP(X,Y,input, print_flag = False):
     #add variables
     slim_solver = pywraplp.Solver('simple_mip_program',
                              pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
+    infinity = slim_solver.infinity()
     variables = {}
-    obj = slim_solver.Objective()
+    objective = slim_solver.Objective()
     for objective_coef, lowerbound, upperbound, variable_type, variable_name in zip(obj, lb,ub,ctype,var_names):
+        if lowerbound == '-inf':
+            lowerbound = -1*infinity
+        if upperbound == 'inf':
+            upperbound = infinity
         if variable_name in variables_to_drop:
             continue
         if variable_type in set(['B','I']):
-            var = slim_solver.IntVar(lb,ub,variable_name)
+            var = slim_solver.IntVar(lowerbound,upperbound,variable_name)
         elif variable_type == 'C':
-            var = slim_solver.NumVar(lb,ub,variable_name)
+            var = slim_solver.NumVar(lowerbound,upperbound,variable_name)
         else:
             assert 0, "variable type : {} is not valid variable type".format(variable_type)
         variables[variable_name] = var
-        # TODO objective = objective + var * objective_coef
+
+        objective.SetCoefficient(var,objective_coef)
+    objective.SetMinimization()
+    #create info dictionary for debugging
+    rho_names = [n for n in rho_names if n not in variables_to_drop]
+    alpha_names = [n for n in alpha_names if n not in variables_to_drop]
+    beta_names = [n for n in beta_names if n not in variables_to_drop]
 
     #Loss Constraints
     #Enforce z_i = 1 if incorrect classification)
@@ -301,11 +308,11 @@ def create_slim_IP(X,Y,input, print_flag = False):
     # z_i*M[i] + ⟨XY[i,:],rho⟩ >= epsilon
     for i in range(N):
         constr = slim_solver.Constraint(epsilon,infinity, 'loss_constraint_{}'.format(i))
-        constr.SetCoefficient(variabes["residual_"+str(i)], M[i])
+        constr.SetCoefficient(variables["error_"+str(i)], M[i])
         for j in range(P):
             # TODO : check if this should be XY[i,j] * (-1)
-            constr.SetCoefficient(variabes["rho_"+str(j)], XY[i,j])
-        constr.set_is_lazy(True)
+            constr.SetCoefficient(variables["rho_"+str(j)], XY[i,j])
+        #constr.set_is_lazy(True)
 
     # 0-Norm LB Constraints:
     # lambda_j,lb * alpha_j <= lambda_j <= Inf
@@ -315,7 +322,7 @@ def create_slim_IP(X,Y,input, print_flag = False):
             continue
         constr = slim_solver.Constraint(0,infinity, '0-Norm LB Constraint_{}'.format(j))
         constr.SetCoefficient(variables['rho_'+str(j)],1.0)
-        constr.SetCoefficient(variabes['alpha_'+str(j)],-rho_lb[j])
+        constr.SetCoefficient(variables['alpha_'+str(j)],-rho_lb[j])
 
     # 0-Norm UB Constraints:
     # lambda_j <= lambda_j,ub * alpha_j
@@ -323,9 +330,9 @@ def create_slim_IP(X,Y,input, print_flag = False):
     for j in range(0, P):
         if ('L0_norm_'+str(j)) in constraints_to_drop or ('L0_norm_ub_'+str(j)) in constraints_to_drop:
             continue
-        constr = slim_solver.Constraint(0,infinity, '0-Norm LB Constraint_{}'.format(j))
+        constr = slim_solver.Constraint(0,infinity, '0-Norm UB Constraint_{}'.format(j))
         constr.SetCoefficient(variables['rho_'+str(j)],-1.0)
-        constr.SetCoefficient(variabes['alpha_'+str(j)],rho_ub[j])
+        constr.SetCoefficient(variables['alpha_'+str(j)],rho_ub[j])
 
     # 1-Norm Positive Constraints:
     #actual constraint: lambda_j <= beta_j
@@ -335,7 +342,7 @@ def create_slim_IP(X,Y,input, print_flag = False):
             continue
         constr = slim_solver.Constraint(0,infinity, 'L1-Norm Positive Constraint_{}'.format(j))
         constr.SetCoefficient(variables['rho_'+str(j)],-1.0)
-        constr.SetCoefficient(variabes['beta_'+str(j)],1.0)
+        constr.SetCoefficient(variables['beta_'+str(j)],1.0)
 
     # 1-Norm Negative Constraints:
     #actual constraint: -lambda_j <= beta_j
@@ -343,9 +350,9 @@ def create_slim_IP(X,Y,input, print_flag = False):
     for j in range(0, P):
         if ('L1_norm_'+str(j)) in constraints_to_drop or ('L1_norm_neg_'+str(j)) in constraints_to_drop:
             continue
-        constr = slim_solver.Constraint(0,infinity, 'L1-Norm Positive Constraint_{}'.format(j))
+        constr = slim_solver.Constraint(0,infinity, 'L1-Norm Negative Constraint_{}'.format(j))
         constr.SetCoefficient(variables['rho_'+str(j)],1.0)
-        constr.SetCoefficient(variabes['beta_'+str(j)],1.0)
+        constr.SetCoefficient(variables['beta_'+str(j)],1.0)
 
     # flags for whether or not we will add contraints
     #add_L0_norm_constraint = (L0_min > 0) or (L0_max < P)
@@ -354,9 +361,10 @@ def create_slim_IP(X,Y,input, print_flag = False):
     #add_neg_error_constraint = (neg_err_min > 0) or (neg_err_max < N_neg) or (add_total_error_constraint)
 
     slim_info = {
-        # variables & constraints
+        # solver data structures
         "variables": variables,
-        "costraints": constraints,
+        "costraints": slim_solver.constraints(),
+        "objective": objective,
         #
         # key parameters
         #
@@ -388,7 +396,7 @@ def create_slim_IP(X,Y,input, print_flag = False):
         "L1_reg_ind": L1_reg_ind,
         #
         "n_variables": len(variables),
-        "n_constraints": len(constraints),
+        "n_constraints": slim_solver.NumConstraints(),
         "names": list(variables.keys()),
         #
         # MIP variables names
