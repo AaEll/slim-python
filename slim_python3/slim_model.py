@@ -72,7 +72,7 @@ class SLIM(BaseEstimator, ClassifierMixin):
         assert P > 0, 'X matrix must have at least 1 column'
         assert len(self.y_) == N, 'len(Y) should be same as # of rows in X'
         assert len(hyper_params['X_names'] ) == P, 'len(X_names) should be same as # of cols in X'
-        assert all(((self.X_ == 1) | (self.X_ == 0)).flatten()), 'X[i,j] should = [0,1] for all i,j'
+        # assert all(((self.X_ == 1) | (self.X_ == 0)).flatten()), 'X[i,j] should = [0,1] for all i,j'
 
         # replace 0 with -1, so Y[i] should = [-1,1] for all i
         self.y_ = np.where(y == 0, -1, y)
@@ -168,7 +168,7 @@ class SLIM(BaseEstimator, ClassifierMixin):
 
         #check_is_fitted(self,['encoder_'])
 
-        X_transformed = X # self.encoder_.transform(X)
+        X_transformed = np.copy(X) # self.encoder_.transform(X)
 
         if '__Intercept__' not in X_names:
             X_transformed = np.insert(arr = X_transformed, obj = 0, values = np.ones(X.shape[0]), axis = 1)
@@ -191,7 +191,7 @@ class SLIM(BaseEstimator, ClassifierMixin):
         # Input validation
         X = check_array(X)
 
-        X,_ = __transform_encoder__(X)
+        X, _ = __transform_encoder__(X)
 
         yhat = X.dot(self.slim_summary_['rho'][:,None]) > 0
         yhat = np.array(yhat, dtype = np.float)
@@ -200,9 +200,7 @@ class SLIM(BaseEstimator, ClassifierMixin):
 
     def __str__(self):
 
-        check_is_fitted(self,['slim_summary_'])
-
-        if self.slim_summary_ is not None and "string_model" in self.slim_summary_:
+        if hasattr(self, 'slim_summary_') and "string_model" in self.slim_summary_:
             return self.slim_summary_["string_model"]
         else:
-            return "SLIM Model : Uninitialized"
+            return "SLIM Model"

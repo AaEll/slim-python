@@ -312,7 +312,8 @@ def check_slim_IP_output(slim_IP, slim_info, X, Y, coef_constraints):
     # extra sanity check tests
     assert total_error <= min(slim_info['N_pos'], slim_info['N_neg']), 'total_error should be less than total_error_pos + total_error_neg'
 
-def print_slim_model(rho_values, X_names, Y_name, show_omitted_variables = False):
+def print_slim_model(rho_values, X_names, Y_name, is_continuous, range_purity = None, show_omitted_variables = False):
+
 
     rho_values = np.copy(rho_values)
     rho_names = list(X_names)
@@ -321,16 +322,14 @@ def print_slim_model(rho_values, X_names, Y_name, show_omitted_variables = False
         intercept_ind = X_names.index('__Intercept__')
         intercept_val = int(rho_values[intercept_ind])
         rho_values = np.delete(rho_values, intercept_ind)
+        is_continuous.pop(intercept_ind)
         rho_names.remove('__Intercept__' )
     else:
         intercept_val = 0
 
-    if Y_name is None:
-        predict_string = "PREDICT Y = +1 IF SCORE >= %d" % intercept_val
-    else:
-        predict_string = "PREDICT %s IF SCORE >= %d" % (Y_name[0].upper(), intercept_val)
 
     if not show_omitted_variables:
+        # filter out rho names & values where rho_i == 0
         selected_ind = np.flatnonzero(rho_values)
         rho_values = rho_values[selected_ind]
         rho_names = [rho_names[i] for i in selected_ind]
@@ -345,21 +344,36 @@ def print_slim_model(rho_values, X_names, Y_name, show_omitted_variables = False
     n_variable_rows = len(rho_values)
     total_string = "ADD POINTS FROM ROWS %d to %d" % (1, n_variable_rows)
 
+    if Y_name is None:
+        predict_string = "LIKELIHOOD Y = +1 BY SCORE"
+    else:
+        predict_string = "LIKELIHOOD %s BY SCORE" % (Y_name[0].upper())
+
     max_name_col_length = max(len(predict_string), len(total_string), max([len(s) for s in rho_names])) + 2
     max_value_col_length = max(7, max([len(s) for s in rho_values_string]) + len("points")) + 2
-
 
     m = PrettyTable()
     m.field_names = ["Variable", "Points", "Tally"]
 
-    m.add_row([predict_string, "", ""])
+
     m.add_row(['=' * max_name_col_length, "=" * max_value_col_length, "========="])
 
+
     for v in range(0, n_variable_rows):
-        m.add_row([rho_names[v], rho_values_string[v], "+ ....."])
+        if is_continuous[v]:
+            m.add_row([rho_names[v],'x  ' + rho_values_string[v], "+ ....."])
+        else:
+            m.add_row([rho_names[v], rho_values_string[v], "+ ....."])
 
     m.add_row(['=' * max_name_col_length, "=" * max_value_col_length, "========="])
     m.add_row([total_string, "SCORE", "= ....."])
+    m.add_row([predict_string, "", ""])
+
+    if range_purity is not None:
+        score_range, purity = range_purity
+        m.add_row(' | '.join(score_range))
+        m.add_row(' | '.join(purity))
+
     m.header = False
     m.align["Variable"] = "l"
     m.align["Points"] = "r"
@@ -368,8 +382,11 @@ def print_slim_model(rho_values, X_names, Y_name, show_omitted_variables = False
 
 def get_rho_summary(rho_values, slim_info, X, Y):
 
+    is_continuous = [ int(not all(((X[:,i] == 1) | (X[:,i] == 0)).flatten())) for i in range(rho_values)]
+
     #build a pretty table model
-    printed_model = print_slim_model(rho_values, X_names = slim_info['X_names'], Y_name = slim_info['Y_name'], show_omitted_variables = False)
+    printed_model = print_slim_model(rho_values, X_names = slim_info['X_names'], Y_name = slim_info['Y_name'],
+                                     is_continuous = is_continuous , show_omitted_variables = False)
 
     #transform Y
     y = np.array(Y.flatten(), dtype = np.float)
